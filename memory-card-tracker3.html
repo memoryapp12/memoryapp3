@@ -306,17 +306,6 @@
             </div>
         </div>
         
-        <div class="voice-section">
-            <div class="voice-status">
-                <div class="voice-indicator" id="voiceIndicator"></div>
-                <span id="voiceStatus">🎤 Voice Control Ready</span>
-            </div>
-            <button id="toggleVoice" class="btn-secondary">Enable Voice Commands</button>
-            <div class="voice-commands">
-                Say: <strong>"Start Camera"</strong> or <strong>"Capture Card"</strong>
-            </div>
-        </div>
-        
         <div class="camera-section">
             <div class="camera-container">
                 <video id="video" autoplay muted playsinline></video>
@@ -335,7 +324,7 @@
         
         <div class="composite-section" id="compositeSection" style="display: none;">
             <h3>📸 All Cards Composite View</h3>
-            <canvas id="compositeCanvas" class="composite-image"></canvas>
+            <canvas id="compositeDisplay" class="composite-image"></canvas>
             <div class="composite-controls">
                 <button id="downloadComposite" class="btn-secondary">Download Image</button>
                 <button id="refreshComposite" class="btn-primary">Refresh View</button>
@@ -352,29 +341,26 @@
     </div>
     
     <canvas id="canvas"></canvas>
-    <canvas id="compositeCanvas"></canvas>
+    <canvas id="compositeCanvas" style="display: none;"></canvas>
     
     <script>
         let cards = [];
         let stream = null;
         let gameStartTime = null;
         let gameTimer = null;
-        let recognition = null;
-        let isVoiceEnabled = false;
         
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         const compositeCanvas = document.getElementById('compositeCanvas');
         const compositeCtx = compositeCanvas.getContext('2d');
+        const compositeDisplay = document.getElementById('compositeDisplay');
+        const compositeDisplayCtx = compositeDisplay.getContext('2d');
         const startCameraBtn = document.getElementById('startCamera');
         const captureCardBtn = document.getElementById('captureCard');
         const clearAllBtn = document.getElementById('clearAll');
         const downloadCompositeBtn = document.getElementById('downloadComposite');
         const refreshCompositeBtn = document.getElementById('refreshComposite');
-        const toggleVoiceBtn = document.getElementById('toggleVoice');
-        const voiceIndicator = document.getElementById('voiceIndicator');
-        const voiceStatus = document.getElementById('voiceStatus');
         const cameraOverlay = document.getElementById('cameraOverlay');
         const cardsContainer = document.getElementById('cardsContainer');
         const compositeSection = document.getElementById('compositeSection');
@@ -386,7 +372,6 @@
         clearAllBtn.addEventListener('click', clearAllCards);
         downloadCompositeBtn.addEventListener('click', downloadComposite);
         refreshCompositeBtn.addEventListener('click', createCompositeImage);
-        toggleVoiceBtn.addEventListener('click', toggleVoiceControl);
         
         async function startCamera() {
             try {
@@ -523,12 +508,24 @@
             // Set canvas size for mobile-friendly composite
             const canvasWidth = 400;
             const canvasHeight = 300;
+            
+            // Set both canvases to same size
             compositeCanvas.width = canvasWidth;
             compositeCanvas.height = canvasHeight;
+            compositeDisplay.width = canvasWidth;
+            compositeDisplay.height = canvasHeight;
             
-            // Clear canvas
-            compositeCtx.fillStyle = '#f0f0f0';
+            // Style the display canvas
+            compositeDisplay.style.width = '100%';
+            compositeDisplay.style.maxWidth = '400px';
+            compositeDisplay.style.height = 'auto';
+            compositeDisplay.style.display = 'block';
+            
+            // Clear both canvases
+            compositeCtx.fillStyle = '#f8f9fa';
             compositeCtx.fillRect(0, 0, canvasWidth, canvasHeight);
+            compositeDisplayCtx.fillStyle = '#f8f9fa';
+            compositeDisplayCtx.fillRect(0, 0, canvasWidth, canvasHeight);
             
             // Calculate grid layout
             const cols = Math.ceil(Math.sqrt(cards.length));
@@ -547,31 +544,37 @@
                     const x = col * cardWidth;
                     const y = row * cardHeight;
                     
-                    // Draw image scaled to fit cell
+                    // Draw on working canvas
                     compositeCtx.drawImage(img, x, y, cardWidth, cardHeight);
                     
-                    // Add border and card number
+                    // Add border and card number on working canvas
                     compositeCtx.strokeStyle = '#333';
                     compositeCtx.lineWidth = 2;
                     compositeCtx.strokeRect(x, y, cardWidth, cardHeight);
                     
-                    // Add card number
+                    // Add card number background
                     compositeCtx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-                    compositeCtx.fillRect(x + 5, y + 5, 25, 20);
+                    compositeCtx.fillRect(x + 5, y + 5, 30, 22);
                     compositeCtx.fillStyle = '#333';
-                    compositeCtx.font = '14px Arial';
-                    compositeCtx.fillText(card.number, x + 10, y + 18);
+                    compositeCtx.font = 'bold 14px Arial';
+                    compositeCtx.textAlign = 'center';
+                    compositeCtx.fillText(card.number, x + 20, y + 19);
+                    
+                    // Also draw on display canvas
+                    compositeDisplayCtx.drawImage(img, x, y, cardWidth, cardHeight);
+                    compositeDisplayCtx.strokeStyle = '#333';
+                    compositeDisplayCtx.lineWidth = 2;
+                    compositeDisplayCtx.strokeRect(x, y, cardWidth, cardHeight);
+                    compositeDisplayCtx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                    compositeDisplayCtx.fillRect(x + 5, y + 5, 30, 22);
+                    compositeDisplayCtx.fillStyle = '#333';
+                    compositeDisplayCtx.font = 'bold 14px Arial';
+                    compositeDisplayCtx.textAlign = 'center';
+                    compositeDisplayCtx.fillText(card.number, x + 20, y + 19);
                     
                     loadedImages++;
                     if (loadedImages === totalImages) {
-                        // Update the visible composite canvas
-                        const visibleCanvas = document.querySelector('.composite-image');
-                        if (visibleCanvas && visibleCanvas.tagName === 'CANVAS') {
-                            const visibleCtx = visibleCanvas.getContext('2d');
-                            visibleCanvas.width = canvasWidth;
-                            visibleCanvas.height = canvasHeight;
-                            visibleCtx.drawImage(compositeCanvas, 0, 0);
-                        }
+                        console.log(`Composite image complete with ${totalImages} cards`);
                     }
                 };
                 img.src = card.image;
@@ -586,108 +589,6 @@
             link.download = `memory-cards-${new Date().toISOString().slice(0, 10)}.png`;
             link.href = compositeCanvas.toDataURL();
             link.click();
-        }
-        
-        function toggleVoiceControl() {
-            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-                alert('Voice recognition not supported in this browser. Try Chrome or Samsung Internet.');
-                return;
-            }
-            
-            if (isVoiceEnabled) {
-                stopVoiceRecognition();
-            } else {
-                startVoiceRecognition();
-            }
-        }
-        
-        function startVoiceRecognition() {
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            recognition = new SpeechRecognition();
-            
-            recognition.continuous = true;
-            recognition.interimResults = false;
-            recognition.lang = 'en-US';
-            
-            recognition.onstart = function() {
-                isVoiceEnabled = true;
-                voiceIndicator.classList.add('listening');
-                voiceStatus.textContent = '🎤 Listening...';
-                toggleVoiceBtn.textContent = 'Disable Voice Commands';
-                toggleVoiceBtn.className = 'btn-danger';
-            };
-            
-            recognition.onresult = function(event) {
-                const last = event.results.length - 1;
-                const command = event.results[last][0].transcript.toLowerCase().trim();
-                
-                voiceStatus.textContent = `🎤 Heard: "${command}"`;
-                
-                // Voice commands
-                if (command.includes('start camera') || command.includes('camera start')) {
-                    if (!stream) {
-                        startCamera();
-                        showVoiceFeedback('Starting camera...');
-                    }
-                } else if (command.includes('capture card') || command.includes('take photo') || command.includes('capture')) {
-                    if (stream && !captureCardBtn.disabled) {
-                        captureCard();
-                        showVoiceFeedback('Card captured!');
-                    }
-                } else if (command.includes('clear all') || command.includes('reset')) {
-                    clearAllCards();
-                    showVoiceFeedback('All cards cleared!');
-                }
-                
-                // Reset status after 3 seconds
-                setTimeout(() => {
-                    if (isVoiceEnabled) {
-                        voiceStatus.textContent = '🎤 Listening...';
-                    }
-                }, 3000);
-            };
-            
-            recognition.onerror = function(event) {
-                console.log('Speech recognition error:', event.error);
-                if (event.error === 'not-allowed') {
-                    alert('Microphone access denied. Please allow microphone permissions.');
-                    stopVoiceRecognition();
-                }
-            };
-            
-            recognition.onend = function() {
-                if (isVoiceEnabled) {
-                    // Restart recognition if it stops (for continuous listening)
-                    setTimeout(() => {
-                        if (isVoiceEnabled) {
-                            recognition.start();
-                        }
-                    }, 100);
-                }
-            };
-            
-            recognition.start();
-        }
-        
-        function stopVoiceRecognition() {
-            if (recognition) {
-                recognition.stop();
-            }
-            isVoiceEnabled = false;
-            voiceIndicator.classList.remove('listening');
-            voiceStatus.textContent = '🎤 Voice Control Ready';
-            toggleVoiceBtn.textContent = 'Enable Voice Commands';
-            toggleVoiceBtn.className = 'btn-secondary';
-        }
-        
-        function showVoiceFeedback(message) {
-            const originalText = voiceStatus.textContent;
-            voiceStatus.textContent = `✓ ${message}`;
-            setTimeout(() => {
-                if (isVoiceEnabled) {
-                    voiceStatus.textContent = '🎤 Listening...';
-                }
-            }, 2000);
         }
         
         function startGameTimer() {
@@ -712,9 +613,6 @@
             }
             if (gameTimer) {
                 clearInterval(gameTimer);
-            }
-            if (recognition) {
-                recognition.stop();
             }
         });
         
